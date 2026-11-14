@@ -1,0 +1,985 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Relief — name the country from its terrain</title>
+<!--__HEAD__-->
+<style>
+/*__FONTS__*/
+:root{
+  --bg:#0D1411; --panel:#121B17; --panel-2:#16211C; --line:#233129; --line-2:#30433A;
+  --paper:#EDE7D7; --muted:#A3AEA6; --faint:#6E7C74;
+  --ochre:#E3A857; --ochre-ink:#1A1209; --glacier:#7CC4D2; --moss:#97C681; --rust:#E57A62;
+  --cond:"Barlow Condensed","Arial Narrow","Roboto Condensed",system-ui,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --r:6px;
+  --ease-out:cubic-bezier(.2,.7,.2,1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--paper);font-family:var(--body);font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+body{min-height:100vh;overflow-x:hidden}
+#contours{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(120% 90% at 50% 35%,transparent 40%,rgba(5,9,7,.75) 100%)}
+.app{position:relative;z-index:1;max-width:1140px;margin:0 auto;padding:0 20px 48px}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--glacier);outline-offset:2px}
+[hidden]{display:none!important}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.lbl{font-family:var(--cond);font-weight:600;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.num{font-family:var(--cond);font-variant-numeric:tabular-nums;font-weight:600}
+
+/* header */
+.top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 0 14px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--cond);font-weight:700;font-size:22px;letter-spacing:.18em;text-transform:uppercase;background:none;border:0;padding:4px 2px;cursor:pointer}
+.brand svg{width:30px;height:30px}
+.track{display:flex;align-items:center;gap:0;list-style:none;margin:0;padding:0}
+.track li{display:flex;align-items:center}
+.track li+li::before{content:"";width:22px;height:0;border-top:1px dashed var(--line-2);margin:0 4px}
+.wp{width:14px;height:14px;border-radius:50%;border:1.5px solid var(--line-2);background:transparent;transition:background .3s,border-color .3s,transform .3s var(--ease-out)}
+.wp.cur{border-color:var(--paper);transform:scale(1.25)}
+.wp.hi{background:var(--moss);border-color:var(--moss)}
+.wp.mid{background:var(--ochre);border-color:var(--ochre)}
+.wp.lo{background:var(--rust);border-color:var(--rust)}
+.total{display:flex;flex-direction:column;align-items:flex-end;line-height:1.1}
+.total .num{font-size:24px}
+
+/* generic */
+.panel{background:rgba(18,27,23,.92);border:1px solid var(--line);border-radius:var(--r)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 22px;border-radius:var(--r);border:1px solid transparent;font-family:var(--cond);font-weight:600;font-size:17px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:background .15s,border-color .15s,color .15s,transform .1s}
+.btn:active{transform:translateY(1px)}
+.btn-primary{background:var(--ochre);color:var(--ochre-ink)}
+.btn-primary:hover{background:#EDB76B}
+.btn-primary:disabled{background:#3A3428;color:#8C8473;cursor:not-allowed;transform:none}
+.btn-ghost{background:transparent;border-color:var(--line-2);color:var(--muted)}
+.btn-ghost:hover{color:var(--paper);border-color:var(--muted)}
+.btn-ghost.armed{color:var(--rust);border-color:var(--rust)}
+.btn svg{width:18px;height:18px}
+
+/* start */
+.start{display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:center;padding:56px 0 24px}
+.start h1{font-family:var(--cond);font-weight:700;font-size:clamp(56px,9vw,104px);line-height:.9;letter-spacing:.04em;text-transform:uppercase;margin:0}
+.start .tag{font-size:20px;color:var(--muted);margin:14px 0 30px;max-width:36ch}
+.rules{list-style:none;margin:0 0 30px;padding:0;display:grid;gap:14px}
+.rules li{display:grid;grid-template-columns:36px 1fr;gap:12px;align-items:start;color:var(--paper)}
+.rules svg{width:28px;height:28px;color:var(--glacier);margin-top:1px}
+.rules b{font-weight:600}
+.opts{display:flex;align-items:center;gap:14px;margin:0 0 26px}
+.switch{position:relative;display:inline-flex;align-items:center;gap:12px;cursor:pointer;min-height:44px}
+.switch input{position:absolute;opacity:0;width:44px;height:26px;margin:0;cursor:pointer}
+.switch .t{width:44px;height:26px;border-radius:13px;background:var(--line);border:1px solid var(--line-2);position:relative;transition:background .2s}
+.switch .t::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--muted);transition:transform .2s var(--ease-out),background .2s}
+.switch input:checked+.t{background:#4B3A1F;border-color:var(--ochre)}
+.switch input:checked+.t::after{transform:translateX(18px);background:var(--ochre)}
+.switch input:focus-visible+.t{outline:2px solid var(--glacier);outline-offset:2px}
+.switch small{display:block;color:var(--muted);font-size:14px}
+.best{margin-top:16px;color:var(--muted);font-size:15px}
+.modes{border:0;margin:0 0 20px;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:560px}
+.modes legend{padding:0;margin-bottom:8px}
+.mode{position:relative;cursor:pointer;display:block}
+.mode input{position:absolute;inset:0;width:100%;height:100%;opacity:0;margin:0;cursor:pointer}
+.mode-card{display:flex;flex-direction:column;gap:2px;height:100%;padding:12px 14px;min-height:64px;border:1px solid var(--line-2);border-radius:var(--r);background:rgba(18,27,23,.85);transition:border-color .15s,background .15s}
+.mode-card b{font-family:var(--cond);font-weight:700;font-size:20px;letter-spacing:.08em;text-transform:uppercase}
+.mode-card small{color:var(--muted);font-size:14px;line-height:1.35}
+.mode:hover .mode-card{border-color:var(--muted)}
+.mode input:checked+.mode-card{border-color:var(--ochre);background:#211B12;box-shadow:inset 0 0 0 1px var(--ochre)}
+.mode input:focus-visible+.mode-card{outline:2px solid var(--glacier);outline-offset:2px}
+.drain{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin:-4px 0 14px}
+.drain i{display:block;height:100%;background:var(--ochre);transform-origin:left;transition:transform .1s linear}
+.drain.low i{background:var(--rust)}
+.meter.low .num{color:var(--rust)}
+.hero{padding:20px 22px 16px}
+.hero .lbl{display:flex;justify-content:space-between}
+.hero svg{display:block;width:100%;height:auto}
+
+/* play */
+.round-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;padding:24px 0 16px;flex-wrap:wrap}
+.round-head h2{margin:0;font-family:var(--cond);font-weight:700;font-size:34px;letter-spacing:.06em;text-transform:uppercase;line-height:1}
+.round-head h2 span{color:var(--faint)}
+.meters{display:flex;gap:28px}
+.meter{display:flex;flex-direction:column;line-height:1.15}
+.meter .num{font-size:24px}
+.meter.value .num{color:var(--ochre)}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.chart{margin:0;padding:14px 14px 10px;position:relative;box-shadow:inset 0 0 0 3px var(--panel),inset 0 0 0 4px var(--line)}
+.chart figcaption{display:flex;justify-content:space-between;align-items:baseline;padding:2px 4px 6px}
+.chart figcaption .dir{font-family:var(--cond);font-weight:600;font-size:15px;letter-spacing:.14em;text-transform:uppercase}
+.chart figcaption .dir svg{width:14px;height:14px;vertical-align:-2px;margin:0 6px;color:var(--muted)}
+.chart svg.plot{display:block;width:100%;height:240px;touch-action:pan-y}
+.plot .grid{stroke:rgba(237,231,215,.09);stroke-dasharray:2 4}
+.plot .zero{stroke:rgba(124,196,210,.45)}
+.plot .ytxt{fill:var(--muted);font-family:var(--cond);font-size:13px;font-variant-numeric:tabular-nums}
+.plot .end{fill:var(--paper);font-family:var(--cond);font-weight:700;font-size:15px;letter-spacing:.1em}
+.plot .km{fill:var(--muted);font-family:var(--cond);font-size:13px;letter-spacing:.06em}
+.plot .ridge{fill:none;stroke:var(--paper);stroke-width:1.6;stroke-linejoin:round}
+.plot .reveal{animation:draw .9s var(--ease-out) both}
+@keyframes draw{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+.plot .cross line{stroke:var(--glacier);stroke-width:1}
+.plot .cross rect{fill:var(--bg);stroke:var(--glacier);stroke-width:1}
+.plot .cross text{fill:var(--paper);font-family:var(--cond);font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.key{display:flex;align-items:center;gap:14px;margin:12px 2px 0;flex-wrap:wrap}
+.key .ramp{flex:1;min-width:240px;max-width:460px}
+.key .bar{height:8px;border-radius:2px}
+.key .ticks{display:flex;justify-content:space-between;font-family:var(--cond);font-size:12px;color:var(--muted);margin-top:3px;font-variant-numeric:tabular-nums}
+.key p{margin:0;color:var(--muted);font-size:14px}
+
+.guess{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:end;margin-top:22px}
+.guess .lbl{grid-column:1/-1;margin-bottom:-4px}
+.combo{position:relative}
+.combo input{width:100%;height:52px;padding:0 44px 0 16px;background:#0F1714;border:1px solid var(--line-2);border-radius:var(--r);font-size:18px;transition:border-color .15s}
+.combo input::placeholder{color:var(--faint)}
+.combo input:focus{border-color:var(--glacier);outline:none;box-shadow:0 0 0 3px rgba(124,196,210,.18)}
+.combo input.ok{border-color:var(--moss)}
+.combo .clear{position:absolute;right:6px;top:6px;width:40px;height:40px;border:0;background:none;color:var(--muted);cursor:pointer;border-radius:4px;display:grid;place-items:center}
+.combo .clear svg{width:16px;height:16px}
+.list{position:absolute;left:0;right:0;top:calc(100% + 6px);margin:0;padding:6px;list-style:none;background:#0F1714;border:1px solid var(--line-2);border-radius:var(--r);max-height:316px;overflow-y:auto;z-index:20;box-shadow:0 18px 40px rgba(0,0,0,.45);scrollbar-color:var(--line-2) transparent}
+.list li{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:10px 12px;min-height:44px;border-radius:4px;cursor:pointer}
+.list li[aria-selected="true"]{background:var(--panel-2);box-shadow:inset 2px 0 0 var(--glacier)}
+.list li mark{background:none;color:var(--ochre);font-weight:600}
+.list li .alt{color:var(--muted);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
+.list li[aria-disabled="true"]{color:var(--faint);cursor:not-allowed;text-decoration:line-through}
+.list li[aria-disabled="true"] .alt{text-decoration:none}
+.list .none{color:var(--muted);cursor:default}
+.msg{min-height:24px;margin:10px 2px 0;color:var(--muted);font-size:15px}
+.msg.err{color:var(--rust)}
+
+.log{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:8px}
+.hint{display:grid;grid-template-columns:28px 1fr auto 96px;gap:14px;align-items:center;padding:10px 14px;position:relative;overflow:hidden;animation:slide .35s var(--ease-out) both}
+@keyframes slide{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.hint .prox{position:absolute;left:0;bottom:0;height:2px;background:var(--glacier);opacity:.7}
+.hint .ix{color:var(--faint)}
+.hint .nm{font-weight:500}
+.hint .km{font-size:20px}
+.hint .dr{display:flex;align-items:center;gap:8px;justify-self:end;font-family:var(--cond);font-weight:600;letter-spacing:.08em}
+.hint .dr svg{width:28px;height:28px;color:var(--glacier);transition:transform .6s var(--ease-out)}
+
+/* reveal */
+.reveal-card{margin-top:22px;display:grid;grid-template-columns:minmax(260px,.9fr) 1.1fr;gap:0;overflow:hidden;animation:slide .4s var(--ease-out) both}
+.reveal-card .info{padding:22px;display:flex;flex-direction:column;gap:14px;border-right:1px solid var(--line)}
+.verdict{display:flex;align-items:center;gap:8px;font-family:var(--cond);font-weight:600;letter-spacing:.12em;text-transform:uppercase;font-size:14px}
+.verdict svg{width:18px;height:18px}
+.verdict.ok{color:var(--moss)} .verdict.ko{color:var(--rust)}
+.who{display:grid;grid-template-columns:88px 1fr;gap:16px;align-items:center}
+.who svg{width:88px;height:88px}
+.who h3{margin:0;font-family:var(--cond);font-weight:700;font-size:34px;line-height:1;letter-spacing:.03em}
+.who .coord{color:var(--muted);font-size:14px;margin-top:6px;font-variant-numeric:tabular-nums}
+.sil{fill:rgba(227,168,87,.22);stroke:var(--ochre);stroke-width:.9;vector-effect:non-scaling-stroke;stroke-linejoin:round}
+.bd{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.bd td{padding:5px 0;border-bottom:1px dashed var(--line)}
+.bd td:last-child{text-align:right;font-family:var(--cond);font-weight:600;font-size:17px}
+.bd tr.sum td{border-bottom:0;border-top:1px solid var(--line-2);padding-top:9px}
+.bd tr.sum td:last-child{font-size:26px;color:var(--ochre)}
+.bd .neg{color:var(--rust)}
+.mapbox{position:relative;background:#0B110E;min-height:240px}
+.mapbox svg{display:block;width:100%;height:100%}
+.land{fill:#22302A;stroke:#0B110E;stroke-width:.35}
+.land.ans{fill:var(--ochre);stroke:#5A4320}
+.land.gs{fill:#2F4F57}
+.route{stroke:var(--glacier);stroke-width:1.2;stroke-dasharray:3 3;fill:none;vector-effect:non-scaling-stroke}
+.pin{fill:var(--glacier)}
+.ring{fill:none;stroke:var(--ochre);stroke-width:1.5;vector-effect:non-scaling-stroke}
+.pinlbl{font-family:var(--cond);font-weight:700;fill:var(--ochre-ink)}
+
+/* end */
+.end{padding:28px 0}
+.end-head{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;margin-bottom:18px}
+.end-head h2{margin:0;font-family:var(--cond);font-weight:700;font-size:72px;line-height:.9;letter-spacing:.02em}
+.end-head h2 .of{color:var(--faint);font-size:32px;letter-spacing:.04em}
+.end-grid{display:grid;grid-template-columns:.9fr 1.1fr;gap:16px}
+.recap{list-style:none;margin:0;padding:6px 18px;max-height:560px;overflow-y:auto;scrollbar-color:var(--line-2) transparent}
+.recap li{display:grid;grid-template-columns:28px 52px 1fr auto;gap:14px;align-items:center;padding:12px 0;border-bottom:1px dashed var(--line)}
+.recap li:last-child{border-bottom:0}
+.recap svg{width:52px;height:52px}
+.recap .nm{font-weight:600}
+.recap .sub{color:var(--muted);font-size:14px}
+.recap .pts{font-size:22px}
+.end .mapbox{border-radius:var(--r);border:1px solid var(--line);overflow:hidden;min-height:320px}
+.end .mapbox svg{position:absolute;inset:0}
+.end-actions{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap}
+.foot{margin-top:40px;color:var(--faint);font-size:13px;border-top:1px solid var(--line);padding-top:14px}
+
+@media (max-width:860px){
+  .start{grid-template-columns:1fr;padding-top:32px;gap:24px}
+  .charts{grid-template-columns:1fr}
+  .reveal-card,.end-grid{grid-template-columns:1fr}
+  .reveal-card .info{border-right:0;border-bottom:1px solid var(--line)}
+  .chart svg.plot{height:200px}
+}
+@media (max-width:560px){
+  .app{padding:0 14px 40px}
+  .track li+li::before{width:10px}
+  .brand span{display:none}
+  .meters{gap:18px}
+  .round-head h2{font-size:28px}
+  .guess{grid-template-columns:1fr 1fr}
+  .guess .combo{grid-column:1/-1}
+  .hint{grid-template-columns:22px 1fr auto;gap:10px}
+  .hint .dr{grid-column:2/-1;justify-self:start}
+  .end-head h2{font-size:56px}
+}
+@media (max-width:420px){.modes{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+</style>
+</head>
+<body>
+<canvas id="contours" aria-hidden="true"></canvas>
+<div class="app">
+  <header class="top">
+    <button class="brand" id="home" type="button" aria-label="Relief — back to start">
+      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M2 25 9 13l4 6 6-11 11 17" stroke="#E3A857" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><path d="M2 29h28" stroke="#7CC4D2" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>Relief</span>
+    </button>
+    <ol class="track" id="track" aria-label="Rounds" hidden></ol>
+    <div class="total" id="totalBox" hidden><span class="lbl" id="totalLbl">Score</span><span class="num" id="total">0</span></div>
+  </header>
+
+  <!-- START -->
+  <section id="s-start" class="start" aria-labelledby="t-start">
+    <div>
+      <h1 id="t-start">Relief</h1>
+      <p class="tag">Name the country from two cross-sections of its terrain.</p>
+      <ul class="rules">
+        <li><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M2 22 8 12l4 5 5-9 9 14H2Z"/></svg><span><b>North → South</b> and <b>West → East</b>: every point is the mean elevation of that slice of the country.</span></li>
+        <li><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="14" cy="14" r="11"/><path d="m14 6 3.5 8L14 22l-3.5-8Z" fill="currentColor" fill-opacity=".25" stroke-linejoin="round"/></svg><span>Miss and you get the <b>distance</b> and <b>direction</b> to the answer. Six attempts per country.</span></li>
+        <li><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="14" cy="15.5" r="9.5"/><path d="M14 15.5V10M11 3h6M14 3v3"/></svg><span>Up to <b>5 000 points</b> per country, 25 000 per game. Misses and time cut into it.</span></li>
+      </ul>
+      <fieldset class="modes">
+        <legend class="lbl">Mode</legend>
+        <label class="mode"><input type="radio" name="mode" value="classic" checked><span class="mode-card"><b>Classic</b><small>5 countries, up to 25&nbsp;000 points</small></span></label>
+        <label class="mode"><input type="radio" name="mode" value="survival"><span class="mode-card"><b>Survival</b><small>Go until a country beats you: 2 minutes and 6 tries each</small></span></label>
+      </fieldset>
+      <div class="opts">
+        <label class="switch"><input type="checkbox" id="micro"><span class="t" aria-hidden="true"></span><span>Include micro-states &amp; small islands<small id="microNote">Adds very small, very hard countries</small></span></label>
+      </div>
+      <button class="btn btn-primary" id="startBtn" type="button">Start — 5 countries
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9h12M10 4l5 5-5 5"/></svg></button>
+      <p class="best" id="bestStart"></p>
+    </div>
+    <figure class="panel hero" aria-hidden="true" style="margin:0">
+      <div class="lbl"><span>Sample profile · N → S</span><span id="heroKm"></span></div>
+      <svg id="heroSvg" viewBox="0 0 400 220"></svg>
+    </figure>
+  </section>
+
+  <!-- PLAY -->
+  <section id="s-play" hidden aria-labelledby="t-round">
+    <div class="round-head">
+      <h2 id="t-round">Country <b id="rnum">1</b> <span id="rof">/ 5</span></h2>
+      <div class="meters">
+        <div class="meter" id="clockBox"><span class="lbl" id="clockLbl">Time</span><span class="num" id="clock">0:00</span></div>
+        <div class="meter"><span class="lbl">Attempts</span><span class="num" id="left">6</span></div>
+        <div class="meter value"><span class="lbl">Round value</span><span class="num" id="value">5 000</span></div>
+      </div>
+    </div>
+    <div class="drain" id="drain" hidden aria-hidden="true"><i id="drainBar"></i></div>
+    <div class="charts">
+      <figure class="chart panel">
+        <figcaption><span class="dir">North<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M1 7h12M8.5 2.5 13 7l-4.5 4.5"/></svg>South</span><span class="lbl">Mean elevation</span></figcaption>
+        <svg class="plot" id="pNS" role="img"></svg>
+      </figure>
+      <figure class="chart panel">
+        <figcaption><span class="dir">West<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M1 7h12M8.5 2.5 13 7l-4.5 4.5"/></svg>East</span><span class="lbl">Mean elevation</span></figcaption>
+        <svg class="plot" id="pWE" role="img"></svg>
+      </figure>
+    </div>
+    <div class="key" aria-hidden="true">
+      <div class="ramp"><div class="bar" id="rampBar"></div><div class="ticks" id="rampTicks"></div></div>
+      <p>Tint follows absolute elevation (m). Hover or tap a profile to read values.</p>
+    </div>
+
+    <div class="guess" id="guessForm" role="group" aria-labelledby="qLabel">
+      <label class="lbl" for="q" id="qLabel">Your guess</label>
+      <div class="combo">
+        <input id="q" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="list" aria-labelledby="qLabel" placeholder="Type a country, then Enter…" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off">
+        <button type="button" class="clear" id="clearQ" aria-label="Clear" hidden><svg viewBox="0 0 16 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 3l10 10M13 3 3 13"/></svg></button>
+        <ul class="list" id="list" role="listbox" aria-label="Countries" hidden></ul>
+      </div>
+      <button class="btn btn-primary" type="button" id="submitBtn" disabled>Submit</button>
+      <button class="btn btn-ghost" type="button" id="giveUp">Give up</button>
+    </div>
+    <p class="msg" id="msg" aria-live="polite"></p>
+    <div id="revealSlot"></div>
+    <ol class="log" id="log" aria-label="Previous guesses"></ol>
+  </section>
+
+  <!-- END -->
+  <section id="s-end" class="end" hidden aria-labelledby="t-end">
+    <div class="end-head">
+      <div><div class="lbl" id="endLbl">Final score</div><h2 id="t-end"><span class="num" id="endTotal">0</span> <span class="of" id="endOf">/ 25 000</span></h2></div>
+      <div class="lbl" id="endBest"></div>
+    </div>
+    <div class="end-grid">
+      <ol class="recap panel" id="recap"></ol>
+      <div class="mapbox" id="endMap"></div>
+    </div>
+    <div class="end-actions">
+      <button class="btn btn-primary" id="againBtn" type="button">Play again</button>
+      <button class="btn btn-ghost" id="backBtn" type="button">Settings</button>
+    </div>
+  </section>
+
+  <p class="foot">Elevation: NOAA ETOPO2v2, 2-arc-minute grid. Borders: Natural Earth 1:10m. Profiles use each country's main territory; remote overseas parts are excluded. Distances are between territory centroids.</p>
+</div>
+
+<script>
+/*__DATA__*/
+(() => {
+"use strict";
+const $ = s => document.querySelector(s);
+const NS = "http://www.w3.org/2000/svg";
+const fmt = n => Math.round(n).toLocaleString("en-US").replace(/,/g, "\u00a0");
+const norm = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------- data prep ---------- */
+const BY = new Map();
+for (const c of DATA) {
+  c.nn = norm(c.n);
+  c.words = c.nn.split(" ");
+  c.al = c.a ? c.a.split("|").map(a => ({ raw: a, n: norm(a) })) : [];
+  BY.set(c.i, c);
+}
+const SORTED = [...DATA].sort((a, b) => a.n.localeCompare(b.n));
+
+/* ---------- geo helpers ---------- */
+const R = 6371, rad = d => d * Math.PI / 180, deg = r => r * 180 / Math.PI;
+function dist(a, b) {
+  const [p1, l1] = a.map(rad), [p2, l2] = b.map(rad);
+  const h = Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin((l2 - l1) / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+// rhumb-line bearing: the direction as read on a map, taking the shorter way round
+const dLon = (a, b) => ((b - a + 540) % 360) - 180;
+function bearing(a, b) {
+  const p1 = rad(a[0]), p2 = rad(b[0]), dl = rad(dLon(a[1], b[1]));
+  const dpsi = Math.log(Math.tan(Math.PI / 4 + p2 / 2) / Math.tan(Math.PI / 4 + p1 / 2));
+  return (deg(Math.atan2(dl, dpsi)) + 360) % 360;
+}
+const POINTS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+const POINT_NAMES = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"];
+const sector = b => Math.round(b / 45) % 8;
+
+// Equal Earth (same constants as the pre-projected world paths)
+const A1 = 1.340264, A2 = -0.081106, A3 = 0.000893, A4 = 0.003796, M = Math.sqrt(3) / 2, SC = 1000 / (2 * 2.7066297319215575);
+function ee(lon, lat) {
+  const l = rad(lon), t = Math.asin(M * Math.sin(rad(lat))), t2 = t * t, t6 = t2 * t2 * t2;
+  const x = l * Math.cos(t) / (M * (A1 + 3 * A2 * t2 + t6 * (7 * A3 + 9 * A4 * t2)));
+  const y = t * (A1 + A2 * t2 + t6 * (A3 + A4 * t2));
+  return [x * SC + 500, -y * SC];
+}
+const WY0 = ee(0, 84)[1] - 4, WY1 = ee(0, -58)[1] + 4;
+
+/* ---------- scoring ---------- */
+const ACC = [1, .8, .62, .46, .32, .2];
+const MAX_TRIES = 6;
+const SURV_LIMIT = 120; // survival: seconds before a country's value drains to 0
+const timeFactor = s => s <= 10 ? 1
+  : state.mode === "survival" ? Math.max(0, 1 - (s - 10) / (SURV_LIMIT - 10))
+  : Math.max(.25, Math.exp(-(s - 10) / 100));
+const roundValue = (wrong, s) => Math.round(5000 * ACC[Math.min(wrong, 5)] * timeFactor(s));
+
+/* ---------- hypsometric tint ---------- */
+const RAMP = [[-100, "#3D6E86"], [0, "#4E7E5A"], [150, "#6D9459"], [400, "#A3A866"], [800, "#C8A86A"], [1500, "#B9875A"], [2500, "#95664E"], [3500, "#867873"], [5000, "#E9E5DD"]];
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+function rampAt(e) {
+  if (e <= RAMP[0][0]) return RAMP[0][1];
+  for (let i = 1; i < RAMP.length; i++) {
+    if (e <= RAMP[i][0]) {
+      const [e0, c0] = RAMP[i - 1], [e1, c1] = RAMP[i], t = (e - e0) / (e1 - e0);
+      const a = hex(c0), b = hex(c1);
+      return "#" + a.map((v, k) => Math.round(v + (b[k] - v) * t).toString(16).padStart(2, "0")).join("");
+    }
+  }
+  return RAMP[RAMP.length - 1][1];
+}
+(function buildKey() {
+  const stops = RAMP.slice(1);
+  $("#rampBar").style.background = `linear-gradient(90deg,${stops.map((s, i) => `${s[1]} ${(i / (stops.length - 1) * 100).toFixed(1)}%`).join(",")})`;
+  $("#rampTicks").innerHTML = stops.map(s => `<span>${fmt(s[0])}</span>`).join("");
+})();
+
+/* ---------- contour background ---------- */
+function contours() {
+  const cv = $("#contours"), dpr = Math.min(2, devicePixelRatio || 1);
+  const W = innerWidth, H = innerHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const hash = (x, y) => { let h = x * 374761393 + y * 668265263 + 1013904223; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967295; };
+  const sm = t => t * t * (3 - 2 * t);
+  const vnoise = (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y), xf = sm(x - xi), yf = sm(y - yi);
+    const a = hash(xi, yi), b = hash(xi + 1, yi), c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1);
+    return a + (b - a) * xf + (c - a) * yf + (a - b - c + d) * xf * yf;
+  };
+  const fbm = (x, y) => vnoise(x, y) * .55 + vnoise(x * 2.1 + 7, y * 2.1 + 3) * .28 + vnoise(x * 4.3 + 1, y * 4.3 + 9) * .17;
+  const cell = 12, cols = Math.ceil(W / cell) + 1, rows = Math.ceil(H / cell) + 1, f = new Float32Array(cols * rows);
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) f[j * cols + i] = fbm(i * cell / 300, j * cell / 300);
+  const LV = 26;
+  for (let l = 1; l < LV; l++) {
+    const th = .15 + l * (.7 / LV), index = l % 5 === 0;
+    g.beginPath();
+    for (let j = 0; j < rows - 1; j++) for (let i = 0; i < cols - 1; i++) {
+      const a = f[j * cols + i], b = f[j * cols + i + 1], c = f[(j + 1) * cols + i + 1], d = f[(j + 1) * cols + i];
+      const k = (a > th) | (b > th) << 1 | (c > th) << 2 | (d > th) << 3;
+      if (k === 0 || k === 15) continue;
+      const x = i * cell, y = j * cell, lp = (p, q) => (th - p) / (q - p);
+      const T = [x + cell * lp(a, b), y], Rr = [x + cell, y + cell * lp(b, c)], B = [x + cell * lp(d, c), y + cell], L = [x, y + cell * lp(a, d)];
+      const seg = (p, q) => { g.moveTo(p[0], p[1]); g.lineTo(q[0], q[1]); };
+      switch (k) {
+        case 1: case 14: seg(L, T); break; case 2: case 13: seg(T, Rr); break;
+        case 3: case 12: seg(L, Rr); break; case 4: case 11: seg(Rr, B); break;
+        case 6: case 9: seg(T, B); break; case 7: case 8: seg(L, B); break;
+        case 5: seg(L, T); seg(Rr, B); break; case 10: seg(T, Rr); seg(L, B); break;
+      }
+    }
+    g.strokeStyle = index ? "rgba(227,168,87,.085)" : "rgba(237,231,215,.045)";
+    g.lineWidth = index ? 1.1 : .8;
+    g.stroke();
+  }
+}
+let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { contours(); if (state.cur) drawCharts(false); }, 180); });
+
+/* ---------- charts ---------- */
+const NB = 96;
+function niceStep(range) {
+  for (const s of [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 2500]) if (range / s <= 5) return s;
+  return 5000;
+}
+function scaleFor(c) {
+  const vals = [...c.ns, ...c.we].filter(v => v !== null);
+  const hi = Math.max(100, ...vals) * 1.08, lo = Math.min(0, ...vals);
+  const step = niceStep(hi - lo);
+  return { max: Math.ceil(hi / step) * step, min: lo < 0 ? Math.floor(lo / step) * step : 0, step };
+}
+// monotone cubic (Fritsch–Carlson) path through points
+function monotone(pts) {
+  const n = pts.length;
+  if (n === 1) return `L${pts[0][0]},${pts[0][1]}`;
+  const dx = [], m = [], t = [];
+  for (let i = 0; i < n - 1; i++) { dx[i] = pts[i + 1][0] - pts[i][0]; m[i] = (pts[i + 1][1] - pts[i][1]) / dx[i]; }
+  t[0] = m[0]; t[n - 1] = m[n - 2];
+  for (let i = 1; i < n - 1; i++) t[i] = m[i - 1] * m[i] <= 0 ? 0 : 3 * (dx[i - 1] + dx[i]) / ((2 * dx[i] + dx[i - 1]) / m[i - 1] + (dx[i] + 2 * dx[i - 1]) / m[i]);
+  let d = "";
+  for (let i = 0; i < n - 1; i++) {
+    const h = dx[i] / 3;
+    d += `C${(pts[i][0] + h).toFixed(1)},${(pts[i][1] + t[i] * h).toFixed(1)} ${(pts[i + 1][0] - h).toFixed(1)},${(pts[i + 1][1] - t[i + 1] * h).toFixed(1)} ${pts[i + 1][0].toFixed(1)},${pts[i + 1][1].toFixed(1)}`;
+  }
+  return d;
+}
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function drawProfile(svg, vals, sc, ends, km, gid, animate) {
+  const W = Math.max(280, svg.clientWidth || 520), H = svg.clientHeight || 240;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = "";
+  const L = 50, Rm = 10, T = 10, B = 44, pw = W - L - Rm, ph = H - T - B;
+  const X = i => L + i / NB * pw, Y = v => T + (sc.max - v) / (sc.max - sc.min) * ph;
+  // gradient in data space
+  const defs = el("defs", {}, svg);
+  const gr = el("linearGradient", { id: gid, gradientUnits: "userSpaceOnUse", x1: 0, x2: 0, y1: Y(sc.min), y2: Y(sc.max) }, defs);
+  const add = (e) => el("stop", { offset: ((e - sc.min) / (sc.max - sc.min)).toFixed(4), "stop-color": rampAt(e) }, gr);
+  add(sc.min); RAMP.forEach(([e]) => { if (e > sc.min && e < sc.max) add(e); }); add(sc.max);
+  // grid
+  for (let v = sc.min; v <= sc.max + 1e-6; v += sc.step) {
+    el("line", { x1: L, x2: W - Rm, y1: Y(v), y2: Y(v), class: v === 0 && sc.min < 0 ? "zero" : "grid" }, svg);
+    const t = el("text", { x: L - 8, y: Y(v) + 4, "text-anchor": "end", class: "ytxt" }, svg);
+    t.textContent = v === 0 ? "0 m" : fmt(v);
+  }
+  // segments
+  const g = el("g", { class: animate && !reduceMotion ? "reveal" : "" }, svg);
+  let seg = [];
+  const flush = () => {
+    if (!seg.length) return;
+    const pts = [];
+    const first = seg[0], last = seg[seg.length - 1];
+    pts.push([X(first[0]), Y(first[1])]);
+    for (const [i, v] of seg) pts.push([X(i + .5), Y(v)]);
+    pts.push([X(last[0] + 1), Y(last[1])]);
+    const top = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}` + monotone(pts);
+    const base = Y(Math.max(0, sc.min));
+    el("path", { d: `${top}L${pts[pts.length - 1][0].toFixed(1)},${base}L${pts[0][0].toFixed(1)},${base}Z`, fill: `url(#${gid})` }, g);
+    el("path", { d: top, class: "ridge" }, g);
+    seg = [];
+  };
+  vals.forEach((v, i) => { if (v === null) flush(); else seg.push([i, v]); });
+  flush();
+  // scale bar as x-axis
+  const yb = H - B + 10, n = 5;
+  for (let k = 0; k < n; k++) el("rect", { x: L + k * pw / n, y: yb, width: pw / n, height: 5, fill: k % 2 ? "transparent" : "#EDE7D7", stroke: "#EDE7D7", "stroke-width": .8 }, svg);
+  const a = el("text", { x: L, y: H - 8, class: "end" }, svg); a.textContent = ends[0];
+  const b = el("text", { x: W - Rm, y: H - 8, class: "end", "text-anchor": "end" }, svg); b.textContent = ends[1];
+  const m = el("text", { x: L + pw / 2, y: H - 8, class: "km", "text-anchor": "middle" }, svg); m.textContent = km > 0 ? `≈ ${fmt(km)} km` : "";
+  // hover crosshair
+  const cross = el("g", { class: "cross", visibility: "hidden" }, svg);
+  const ln = el("line", { y1: T, y2: T + ph }, cross);
+  const bx = el("rect", { height: 20, rx: 3 }, cross);
+  const tx = el("text", {}, cross);
+  const show = ev => {
+    const r = svg.getBoundingClientRect(), x = (ev.clientX - r.left) * W / r.width;
+    const i = Math.floor((x - L) / pw * NB);
+    if (i < 0 || i >= NB || vals[i] === null) { cross.setAttribute("visibility", "hidden"); return; }
+    const cx = X(i + .5), label = `${fmt(vals[i])} m`;
+    ln.setAttribute("x1", cx); ln.setAttribute("x2", cx);
+    tx.textContent = label;
+    const tw = label.length * 7 + 12, left = Math.min(Math.max(cx - tw / 2, L), W - Rm - tw);
+    bx.setAttribute("x", left); bx.setAttribute("y", T); bx.setAttribute("width", tw);
+    tx.setAttribute("x", left + 6); tx.setAttribute("y", T + 14);
+    cross.setAttribute("visibility", "visible");
+  };
+  svg.onpointermove = show; svg.onpointerdown = show;
+  svg.onpointerleave = () => cross.setAttribute("visibility", "hidden");
+  const nn = vals.filter(v => v !== null), mx = Math.max(...nn);
+  svg.setAttribute("aria-label", `${ends[0] === "N" ? "North to south" : "West to east"} mean elevation profile over about ${fmt(km)} km; highest slice about ${fmt(mx)} m.`);
+}
+function drawCharts(animate) {
+  const c = state.cur, sc = scaleFor(c);
+  drawProfile($("#pNS"), c.ns, sc, ["N", "S"], c.sp[0], "gNS", animate);
+  drawProfile($("#pWE"), c.we, sc, ["W", "E"], c.sp[1], "gWE", animate);
+}
+
+/* ---------- maps ---------- */
+function worldSvg(highlight, guesses, focus, aspect = 1.9) {
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("role", "img");
+  let vb = [0, WY0, 1000, WY1 - WY0];
+  if (focus) {
+    const pts = focus.map(([lat, lon]) => ee(lon, lat));
+    let x0 = Math.min(...pts.map(p => p[0])), x1 = Math.max(...pts.map(p => p[0]));
+    let y0 = Math.min(...pts.map(p => p[1])), y1 = Math.max(...pts.map(p => p[1]));
+    let w = Math.max(x1 - x0, 140) * 1.35, h = Math.max(y1 - y0, 70) * 1.35;
+    if (w / h > aspect) h = w / aspect; else w = h * aspect;
+    w = Math.min(w, 1000); h = Math.min(h, WY1 - WY0);
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    vb = [Math.min(Math.max(cx - w / 2, 0), 1000 - w), Math.min(Math.max(cy - h / 2, WY0), WY1 - h), w, h];
+  }
+  svg.setAttribute("viewBox", vb.map(v => v.toFixed(1)).join(" "));
+  svg.setAttribute("preserveAspectRatio", "xMidYMid slice");
+  const k = vb[2] / 1000;
+  const gset = new Set(guesses.map(g => g.i));
+  let html = `<path class="land" d="${WORLD._bg}"/>`;
+  for (const id in WORLD) if (id !== "_bg") {
+    const cls = highlight.has(id) ? "land ans" : gset.has(id) ? "land gs" : "land";
+    if (!highlight.has(id)) html += `<path class="${cls}" d="${WORLD[id]}"/>`;
+  }
+  for (const id of highlight) html += `<path class="land ans" d="${WORLD[id]}"/>`;
+  svg.innerHTML = html;
+  return { svg, k };
+}
+function revealMap(ans, guesses) {
+  const focus = [ans.c, ...guesses.map(g => g.c), [ans.b[1], Math.min(ans.b[0], 180)], [ans.b[3], Math.min(ans.b[2], 180)]];
+  const { svg, k } = worldSvg(new Set([ans.i]), guesses, focus);
+  const [ax, ay] = ee(ans.c[1], ans.c[0]);
+  for (const g of guesses) {
+    const [gx, gy] = ee(g.c[1], g.c[0]);
+    const raw = ans.c[1] - g.c[1];
+    if (Math.abs(raw) > 180) {
+      const edge = raw > 0 ? -180 : 180, t = Math.abs((edge - g.c[1]) / dLon(g.c[1], ans.c[1]));
+      const latX = g.c[0] + (ans.c[0] - g.c[0]) * t;
+      const [e1x, e1y] = ee(edge - Math.sign(edge) * 1e-6, latX), [e2x, e2y] = ee(-edge + Math.sign(edge) * 1e-6, latX);
+      el("path", { d: `M${gx},${gy}L${e1x},${e1y}M${e2x},${e2y}L${ax},${ay}`, class: "route" }, svg);
+    } else el("line", { x1: gx, y1: gy, x2: ax, y2: ay, class: "route" }, svg);
+    el("circle", { cx: gx, cy: gy, r: 3.2 * k * 2.2, class: "pin" }, svg);
+  }
+  el("circle", { cx: ax, cy: ay, r: 9 * k * 2.2, class: "ring" }, svg);
+  svg.setAttribute("aria-label", `Map showing ${ans.n}${guesses.length ? " and your guesses" : ""}.`);
+  return svg;
+}
+function silSvg(c, size) {
+  const s = document.createElementNS(NS, "svg");
+  s.setAttribute("viewBox", "-4 -4 108 108");
+  s.setAttribute("aria-hidden", "true");
+  if (size) { s.setAttribute("width", size); s.setAttribute("height", size); }
+  s.innerHTML = `<path class="sil" d="${c.s}"/>`;
+  return s;
+}
+
+/* ---------- state ---------- */
+const state = { mode: "classic", picks: [], round: 0, cur: null, done: true, wrong: [], t0: 0, tick: null, total: 0, results: [], recent: [], micro: false, sel: null, active: -1, opts: [] };
+const BEST_KEY = { classic: "relief.best", survival: "relief.bestRun" };
+const best = { classic: 0, survival: 0 };
+for (const m in BEST_KEY) { try { best[m] = +localStorage.getItem(BEST_KEY[m]) || 0; } catch (e) { } }
+const saveBest = (m, v) => { best[m] = v; try { localStorage.setItem(BEST_KEY[m], String(v)); } catch (e) { } };
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const found = () => state.results.filter(r => r.ok).length;
+const selectedMode = () => document.querySelector('input[name="mode"]:checked').value;
+
+const drawPool = () => DATA.filter(c => c.p === 1 || (state.micro && c.p === 2));
+function pickWave() {
+  const pool = drawPool();
+  if (state.mode === "survival") return shuffle([...pool]);
+  const fresh = pool.filter(c => !state.recent.includes(c.i));
+  const src = fresh.length >= 5 ? fresh : pool;
+  const a = [...src];
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  state.recent = [...state.recent, ...a.slice(0, 5).map(c => c.i)].slice(-25);
+  return a.slice(0, 5);
+}
+
+function show(id) {
+  for (const s of ["#s-start", "#s-play", "#s-end"]) $(s).hidden = s !== id;
+  const inGame = id !== "#s-start";
+  $("#track").hidden = !inGame || state.mode === "survival"; $("#totalBox").hidden = !inGame;
+  scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+}
+
+function renderTrack() {
+  if (state.mode === "survival") {
+    $("#totalLbl").textContent = "Found";
+    $("#total").textContent = found();
+    return;
+  }
+  $("#totalLbl").textContent = "Score";
+  const t = $("#track"); t.innerHTML = "";
+  for (let i = 0; i < 5; i++) {
+    const li = document.createElement("li"), d = document.createElement("span");
+    const r = state.results[i];
+    d.className = "wp" + (r ? (r.pts >= 3500 ? " hi" : r.pts > 0 ? " mid" : " lo") : i === state.round && state.cur ? " cur" : "");
+    li.setAttribute("aria-label", r ? `Country ${i + 1}: ${fmt(r.pts)} points` : i === state.round ? `Country ${i + 1}: in progress` : `Country ${i + 1}: upcoming`);
+    if (i === state.round && !r) li.setAttribute("aria-current", "step");
+    li.appendChild(d); t.appendChild(li);
+  }
+  $("#total").textContent = fmt(state.total);
+}
+
+function newGame() {
+  state.mode = selectedMode();
+  state.micro = $("#micro").checked;
+  state.picks = pickWave();
+  state.round = 0; state.total = 0; state.results = [];
+  show("#s-play");
+  startRound();
+}
+
+function startRound() {
+  if (state.round >= state.picks.length) state.picks.push(...shuffle(drawPool()));
+  state.cur = state.picks[state.round];
+  state.wrong = []; state.sel = null; state.done = false;
+  const surv = state.mode === "survival";
+  $("#rnum").textContent = state.round + 1;
+  $("#rof").textContent = surv ? "" : "/ 5";
+  $("#clockLbl").textContent = surv ? "Time left" : "Time";
+  $("#drain").hidden = !surv;
+  $("#log").innerHTML = ""; $("#revealSlot").innerHTML = ""; setMsg("");
+  $("#guessForm").hidden = false;
+  $("#q").value = ""; $("#clearQ").hidden = true; validate();
+  disarmGiveUp();
+  renderTrack();
+  drawCharts(true);
+  state.t0 = performance.now();
+  clearInterval(state.tick);
+  state.tick = setInterval(updateMeters, 100);
+  updateMeters();
+  if (matchMedia("(pointer: fine)").matches) $("#q").focus({ preventScroll: true });
+}
+
+const elapsed = () => (performance.now() - state.t0) / 1000;
+const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+function updateMeters() {
+  if (state.done) return;
+  const s = elapsed(), v = roundValue(state.wrong.length, s);
+  $("#value").textContent = fmt(v);
+  $("#left").textContent = MAX_TRIES - state.wrong.length;
+  if (state.mode === "survival") {
+    const rest = Math.max(0, SURV_LIMIT - s), low = rest <= 20;
+    $("#clock").textContent = mmss(Math.ceil(rest));
+    $("#clockBox").classList.toggle("low", low);
+    $("#drain").classList.toggle("low", low);
+    $("#drainBar").style.transform = `scaleX(${(v / 5000).toFixed(4)})`;
+    if (s >= SURV_LIMIT) finish(false, "time");
+  } else {
+    $("#clockBox").classList.remove("low");
+    $("#clock").textContent = mmss(s);
+  }
+}
+
+function setMsg(t, err) { const m = $("#msg"); m.textContent = t; m.classList.toggle("err", !!err); m.classList.remove("sr"); }
+
+/* ---------- combobox ---------- */
+const q = $("#q"), list = $("#list");
+function matches(text) {
+  const t = norm(text);
+  if (!t) return SORTED.map(c => ({ c, rank: 0 }));
+  const out = [];
+  for (const c of DATA) {
+    let rank = -1, alt = null;
+    if (c.nn.startsWith(t)) rank = 0;
+    else if (c.words.some(w => w.startsWith(t))) rank = 1;
+    else {
+      const a = c.al.find(a => a.n.startsWith(t) || a.n.split(" ").some(w => w.startsWith(t)));
+      if (a) { rank = 2; alt = a.raw; }
+      else if (c.nn.includes(t)) rank = 3;
+      else { const b = c.al.find(a => a.n.includes(t)); if (b && t.length > 2) { rank = 4; alt = b.raw; } }
+    }
+    if (rank >= 0) out.push({ c, rank, alt });
+  }
+  return out.sort((a, b) => a.rank - b.rank || a.c.n.localeCompare(b.c.n));
+}
+function hl(name, text) {
+  const t = norm(text);
+  if (!t) return esc(name);
+  // per-character normalisation with an index map back to the original string
+  let map = [], acc = "";
+  for (let i = 0; i < name.length; i++) {
+    const n = name[i].normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, " ");
+    for (const ch of n) { acc += ch; map.push(i); }
+  }
+  let idx = acc.startsWith(t) ? 0 : acc.indexOf(" " + t);
+  idx = idx > 0 ? idx + 1 : idx === 0 ? 0 : acc.indexOf(t);
+  if (idx < 0) return esc(name);
+  const i0 = map[idx], i1 = map[idx + t.length - 1];
+  if (i0 === undefined || i1 === undefined) return esc(name);
+  return esc(name.slice(0, i0)) + "<mark>" + esc(name.slice(i0, i1 + 1)) + "</mark>" + esc(name.slice(i1 + 1));
+}
+const esc = s => s.replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+function openList() {
+  const res = matches(q.value);
+  state.opts = res;
+  state.active = -1;
+  const guessed = new Set(state.wrong.map(g => g.i));
+  list.innerHTML = res.length ? res.map((r, k) => {
+    const dis = guessed.has(r.c.i);
+    return `<li role="option" id="opt-${k}" data-i="${r.c.i}" aria-selected="false"${dis ? ' aria-disabled="true"' : ""}><span>${hl(r.c.n, q.value)}</span>${dis ? '<span class="alt">guessed</span>' : r.alt ? `<span class="alt">${esc(r.alt)}</span>` : ""}</li>`;
+  }).join("") : `<li class="none" role="option" aria-disabled="true">No country matches “${esc(q.value)}”</li>`;
+  list.hidden = false; q.setAttribute("aria-expanded", "true");
+  list.scrollTop = 0;
+  if (q.value.trim() && res.length) setActive(res.findIndex(r => !guessed.has(r.c.i)));
+}
+function closeList() { list.hidden = true; q.setAttribute("aria-expanded", "false"); q.removeAttribute("aria-activedescendant"); state.active = -1; }
+function setActive(k) {
+  const items = list.querySelectorAll("li[data-i]");
+  items.forEach(li => li.setAttribute("aria-selected", "false"));
+  state.active = k;
+  if (k < 0 || !items[k]) { q.removeAttribute("aria-activedescendant"); return; }
+  items[k].setAttribute("aria-selected", "true");
+  q.setAttribute("aria-activedescendant", items[k].id);
+  items[k].scrollIntoView({ block: "nearest" });
+}
+function pick(id) {
+  const c = BY.get(id);
+  if (!c || state.wrong.some(g => g.i === id)) return false;
+  q.value = c.n; validate();
+  return true;
+}
+function choose(id) {
+  if (!pick(id)) return;
+  closeList();
+  $("#submitBtn").focus();
+}
+function validate() {
+  const exact = DATA.find(c => c.nn === norm(q.value));
+  state.sel = exact ? exact.i : null;
+  const dup = state.sel && state.wrong.some(g => g.i === state.sel);
+  $("#submitBtn").disabled = !state.sel || !!dup;
+  q.classList.toggle("ok", !!state.sel && !dup);
+  $("#clearQ").hidden = !q.value;
+}
+q.addEventListener("input", () => { validate(); openList(); setMsg(""); });
+q.addEventListener("click", () => { if (list.hidden) openList(); });
+q.addEventListener("blur", () => setTimeout(closeList, 120));
+q.addEventListener("keydown", e => {
+  const items = list.querySelectorAll("li[data-i]");
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    if (list.hidden) { openList(); return; }
+    let k = state.active, step = e.key === "ArrowDown" ? 1 : -1;
+    for (let n = 0; n < items.length; n++) {
+      k = (k + step + items.length) % items.length;
+      if (items[k].getAttribute("aria-disabled") !== "true") break;
+    }
+    setActive(k);
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (!list.hidden && state.active >= 0 && items[state.active]) pick(items[state.active].dataset.i);
+    closeList();
+    submitGuess();
+  } else if (e.key === "Escape") { if (!list.hidden) { e.preventDefault(); closeList(); } else { q.value = ""; validate(); } }
+});
+list.addEventListener("mousedown", e => e.preventDefault());
+list.addEventListener("click", e => { const li = e.target.closest("li[data-i]"); if (li && li.getAttribute("aria-disabled") !== "true") choose(li.dataset.i); });
+$("#clearQ").addEventListener("click", () => { q.value = ""; validate(); q.focus(); });
+
+/* ---------- guessing ---------- */
+$("#submitBtn").addEventListener("click", submitGuess);
+function submitGuess() {
+  if (!state.cur || !$("#s-play").offsetParent || $("#guessForm").hidden) return;
+  if (!state.sel) { if (q.value.trim()) setMsg("Pick a country from the list.", true); return; }
+  const g = BY.get(state.sel);
+  if (state.wrong.some(w => w.i === g.i)) { setMsg(`${g.n} is already on your list.`, true); return; }
+  q.value = ""; validate(); closeList();
+  if (g.i === state.cur.i) return finish(true);
+  state.wrong.push(g);
+  addHint(g);
+  updateMeters();
+  if (state.wrong.length >= MAX_TRIES) return finish(false, "misses");
+  q.focus({ preventScroll: true });
+}
+function addHint(g) {
+  const a = state.cur, d = dist(g.c, a.c), b = bearing(g.c, a.c), s = sector(b);
+  const km = d < 100 ? Math.round(d) : Math.round(d / 10) * 10;
+  const prox = Math.max(0, 1 - d / 15000);
+  const li = document.createElement("li");
+  li.className = "hint panel";
+  li.innerHTML = `<span class="ix num">${state.wrong.length}</span><span class="nm">${esc(g.n)}</span><span class="km num">${fmt(km)} km</span>
+    <span class="dr"><svg viewBox="0 0 28 28" aria-hidden="true" style="transform:rotate(0deg)"><circle cx="14" cy="14" r="12.5" fill="none" stroke="currentColor" stroke-opacity=".35"/><path d="M14 4.5 19 19l-5-3-5 3Z" fill="currentColor"/></svg>${POINTS[s]}</span>
+    <span class="prox" style="width:${(prox * 100).toFixed(1)}%"></span>`;
+  $("#log").prepend(li);
+  requestAnimationFrame(() => requestAnimationFrame(() => { li.querySelector(".dr svg").style.transform = `rotate(${b.toFixed(0)}deg)`; }));
+  const left = MAX_TRIES - state.wrong.length;
+  setMsg(`Not ${g.n}. The answer is ${fmt(km)} km to the ${POINT_NAMES[s]}. ${left} attempt${left === 1 ? "" : "s"} left.`);
+}
+
+const giveBtn = $("#giveUp");
+let armT;
+function disarmGiveUp() { clearTimeout(armT); giveBtn.classList.remove("armed"); giveBtn.textContent = "Give up"; }
+giveBtn.addEventListener("click", () => {
+  if (!giveBtn.classList.contains("armed")) {
+    giveBtn.classList.add("armed"); giveBtn.textContent = "Confirm";
+    armT = setTimeout(disarmGiveUp, 3000); return;
+  }
+  disarmGiveUp(); finish(false, "gave");
+});
+
+function finish(ok, reason) {
+  if (state.done) return;
+  state.done = true;
+  clearInterval(state.tick);
+  const surv = state.mode === "survival";
+  const s = Math.min(elapsed(), surv ? SURV_LIMIT : Infinity), w = state.wrong.length, a = state.cur;
+  const afterMiss = Math.round(5000 * ACC[Math.min(w, 5)]);
+  const pts = ok ? roundValue(w, s) : 0;
+  state.results.push({ c: a, pts, w, s, ok, reason });
+  $("#value").textContent = fmt(pts);
+  state.total += pts;
+  closeList();
+  $("#guessForm").hidden = true;
+  renderTrack();
+  setMsg("");
+  const card = document.createElement("div");
+  card.className = "reveal-card panel";
+  const lat = a.c[0], lon = a.c[1];
+  const coord = `${Math.abs(lat).toFixed(1)}° ${lat >= 0 ? "N" : "S"}, ${Math.abs(lon).toFixed(1)}° ${lon >= 0 ? "E" : "W"}`;
+  const mm = mmss(s);
+  const why = reason === "time" ? "Out of time" : reason === "misses" ? `Six misses after ${mm}` : `Gave up after ${mm}`;
+  const rows = ok ? `
+      <tr><td>Base</td><td>${fmt(5000)}</td></tr>
+      <tr><td>${w} miss${w === 1 ? "" : "es"} <span class="lbl">×${ACC[w].toFixed(2)}</span></td><td class="neg">${w ? "−" + fmt(5000 - afterMiss) : "0"}</td></tr>
+      <tr><td>Time ${mm} <span class="lbl">×${timeFactor(s).toFixed(2)}</span></td><td class="neg">${afterMiss - pts ? "−" + fmt(afterMiss - pts) : "0"}</td></tr>
+      <tr class="sum"><td>Points</td><td>${fmt(pts)}</td></tr>` : `
+      <tr><td>${why}</td><td class="neg">−${fmt(5000)}</td></tr>
+      <tr class="sum"><td>Points</td><td>0</td></tr>`;
+  card.innerHTML = `<div class="info">
+      <div class="verdict ${ok ? "ok" : "ko"}">${ok
+      ? '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 9.5 4 4 8-9"/></svg>Correct'
+      : '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 4l10 10M14 4 4 14"/></svg>' + (surv ? `Run over · ${found()} found · the answer was` : "The answer was")}</div>
+      <div class="who"><span class="silbox"></span><div><h3>${esc(a.n)}</h3><div class="coord">${coord} · ${fmt(a.sp[0])} × ${fmt(a.sp[1])} km</div></div></div>
+      <table class="bd">${rows}</table>
+      <button class="btn btn-primary" type="button" id="nextBtn">${(surv ? ok : state.round < 4) ? "Next country" : "See results"}
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9h12M10 4l5 5-5 5"/></svg></button>
+    </div><div class="mapbox"></div>`;
+  card.querySelector(".silbox").replaceWith(silSvg(a));
+  card.querySelector(".mapbox").appendChild(revealMap(a, state.wrong));
+  $("#revealSlot").appendChild(card);
+  $("#nextBtn").addEventListener("click", next);
+  $("#nextBtn").focus({ preventScroll: true });
+  card.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "nearest" });
+  $("#msg").textContent = ok ? `Correct: ${a.n}. ${fmt(pts)} points.` : `${surv ? "Run over. " : ""}The answer was ${a.n}.`;
+  $("#msg").classList.add("sr");
+}
+
+function next() {
+  const last = state.results[state.results.length - 1];
+  state.round++;
+  if (state.mode === "survival" ? last && last.ok : state.round < 5) startRound(); else endGame();
+}
+
+function endGame() {
+  state.cur = null; state.done = true;
+  renderTrack();
+  const surv = state.mode === "survival", n = found();
+  const result = surv ? n : state.total;
+  const newBest = result > best[state.mode];
+  if (newBest) saveBest(state.mode, result);
+  $("#endLbl").textContent = surv ? "Survival · countries found" : "Final score";
+  $("#endTotal").textContent = fmt(result);
+  $("#endOf").textContent = surv ? `· ${fmt(state.total)} pts` : "/ 25 000";
+  $("#endBest").textContent = newBest ? (surv ? "New best run" : "New best score") : `Best ${surv ? "run" : ""} ${fmt(best[state.mode])}`.replace("  ", " ");
+  const rc = $("#recap"); rc.innerHTML = "";
+  state.results.forEach((r, i) => {
+    const li = document.createElement("li");
+    const mm = `${Math.floor(r.s / 60)}:${String(Math.floor(r.s % 60)).padStart(2, "0")}`;
+    const sub = r.ok ? `${r.w} miss${r.w === 1 ? "" : "es"} · ${mm}` : r.reason === "time" ? "Out of time" : r.reason === "misses" ? "Not found" : "Gave up";
+    li.innerHTML = `<span class="num" style="color:var(--faint)">${i + 1}</span><span class="sb"></span><div><div class="nm">${esc(r.c.n)}</div><div class="sub">${sub}</div></div><span class="pts num" style="color:${r.pts >= 3500 ? "var(--moss)" : r.pts > 0 ? "var(--ochre)" : "var(--rust)"}">${fmt(r.pts)}</span>`;
+    li.querySelector(".sb").replaceWith(silSvg(r.c, 52));
+    rc.appendChild(li);
+  });
+  const focus = state.results.flatMap(r => [r.c.c, [r.c.b[1], Math.min(r.c.b[0], 180)], [r.c.b[3], Math.min(r.c.b[2], 180)]]);
+  const { svg, k } = worldSvg(new Set(state.results.map(r => r.c.i)), [], focus, 1.45);
+  state.results.forEach((r, i) => {
+    const [x, y] = ee(r.c.c[1], r.c.c[0]);
+    el("circle", { cx: x, cy: y, r: 22 * k, fill: r.ok ? "#E3A857" : "#E57A62", stroke: "#0B110E", "stroke-width": 3 * k }, svg);
+    const t = el("text", { x, y: y + 9 * k, "text-anchor": "middle", class: "pinlbl", "font-size": 26 * k }, svg); t.textContent = i + 1;
+  });
+  svg.setAttribute("aria-label", "World map of the countries played: " + state.results.map(r => r.c.n).join(", "));
+  const em = $("#endMap"); em.innerHTML = ""; em.appendChild(svg);
+  show("#s-end");
+  $("#againBtn").focus({ preventScroll: true });
+}
+
+function syncStart() {
+  const m = selectedMode();
+  $("#startBtn").firstChild.textContent = m === "survival" ? "Start survival " : "Start — 5 countries ";
+  $("#bestStart").textContent = !best[m] ? "" : m === "survival" ? `Best run: ${fmt(best[m])} countries` : `Best score: ${fmt(best[m])} / 25 000`;
+}
+function toStart() {
+  clearInterval(state.tick); state.cur = null; state.done = true;
+  show("#s-start");
+  syncStart();
+  hero();
+}
+
+/* ---------- start-screen sample ---------- */
+function hero() {
+  const pool = DATA.filter(c => c.p === 1 && c.ns.filter(v => v !== null).length > 90);
+  const c = pool[Math.floor(Math.random() * pool.length)];
+  const svg = $("#heroSvg"); svg.innerHTML = "";
+  const sc = scaleFor(c), W = 400, H = 220, T = 8, B = 8;
+  const X = i => i / NB * W, Y = v => T + (sc.max - v) / (sc.max - sc.min) * (H - T - B);
+  const defs = el("defs", {}, svg);
+  const gr = el("linearGradient", { id: "gHero", gradientUnits: "userSpaceOnUse", x1: 0, x2: 0, y1: Y(sc.min), y2: Y(sc.max) }, defs);
+  const add = e => el("stop", { offset: ((e - sc.min) / (sc.max - sc.min)).toFixed(4), "stop-color": rampAt(e) }, gr);
+  add(sc.min); RAMP.forEach(([e]) => { if (e > sc.min && e < sc.max) add(e); }); add(sc.max);
+  for (let v = sc.min; v <= sc.max; v += sc.step) el("line", { x1: 0, x2: W, y1: Y(v), y2: Y(v), stroke: "rgba(237,231,215,.08)", "stroke-dasharray": "2 4" }, svg);
+  const pts = []; c.ns.forEach((v, i) => { if (v !== null) pts.push([X(i + .5), Y(v)]); });
+  const top = `M${pts[0][0]},${pts[0][1]}` + monotone(pts);
+  const base = Y(Math.max(0, sc.min));
+  const g = el("g", { class: reduceMotion ? "" : "reveal" }, svg);
+  g.style.animation = reduceMotion ? "" : "draw 1.4s var(--ease-out) both";
+  el("path", { d: `${top}L${pts[pts.length - 1][0]},${base}L${pts[0][0]},${base}Z`, fill: "url(#gHero)" }, g);
+  el("path", { d: top, fill: "none", stroke: "#EDE7D7", "stroke-width": 1.6 }, g);
+  $("#heroKm").textContent = `≈ ${fmt(c.sp[0])} km`;
+}
+
+/* ---------- wiring ---------- */
+const stdN = DATA.filter(c => c.p === 1).length, microN = DATA.filter(c => c.p === 2).length;
+$("#microNote").textContent = `Adds ${microN} tiny countries to the ${stdN}-country draw. Much harder.`;
+$("#startBtn").addEventListener("click", newGame);
+document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener("change", syncStart));
+$("#againBtn").addEventListener("click", newGame);
+$("#backBtn").addEventListener("click", toStart);
+$("#home").addEventListener("click", toStart);
+contours();
+toStart();
+window.__relief = { state, DATA, BY };
+/*__SW__*/
+})();
+</script>
+</body>
+</html>
